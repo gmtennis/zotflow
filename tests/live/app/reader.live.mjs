@@ -124,16 +124,23 @@ describe("obsidian://zotflow links", () => {
         }, params);
     const activePage = (page) =>
         page.frameLocator(".workspace-leaf.mod-active iframe").locator("#pageNumber").inputValue();
-
-    test("&page= opens the attachment at that page, in a new and in an open reader", async () => {
-        const { page } = session;
-        // Leave the reader on page 1, so a restored view state cannot pass for page 2.
+    // Leave the PDF on page 1 and close it, so the link has to open a new
+    // reader and a restored view state cannot pass for page 2. An empty tab
+    // is opened first so the main area keeps its tab group.
+    const closeOnFirstPage = async (page) => {
         const r = await openReader(page, key("attention-pdf"));
         await r.reader.locator("#pageNumber").fill("1");
         await r.reader.locator("#pageNumber").press("Enter");
         await page.evaluate(() => {
-            for (const l of window.app.workspace.getLeavesOfType("zotflow-zotero-reader-view")) l.detach();
+            const ws = window.app.workspace;
+            const keep = ws.getLeaf("tab");
+            for (const l of ws.getLeavesOfType("zotflow-zotero-reader-view")) if (l !== keep) l.detach();
         });
+    };
+
+    test("&page= opens the attachment at that page, in a new and in an open reader", async () => {
+        const { page } = session;
+        await closeOnFirstPage(page);
 
         const link = { type: "open-attachment", libraryID: String(LIBRARY_ID), key: key("attention-pdf") };
         await follow(page, { ...link, page: "2" });
@@ -141,6 +148,14 @@ describe("obsidian://zotflow links", () => {
 
         await follow(page, { ...link, page: "1" });
         await until(async () => (await activePage(page)) === "1", { message: "page 1 in the open reader" });
+    });
+
+    test("an annotation link opens a closed reader at the annotation's page", async () => {
+        const { page } = session;
+        await closeOnFirstPage(page);
+        // The underline is on the second page.
+        await follow(page, { type: "open-annotation", libraryID: String(LIBRARY_ID), key: key("attention-pdf-underline") });
+        await until(async () => (await activePage(page)) === "2", { message: "page 2 in a new reader" });
     });
 
     test("an annotation link still selects the annotation", async () => {

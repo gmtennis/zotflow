@@ -55,6 +55,9 @@ export class ZoteroReaderView extends ItemView {
     private keyInfo: IDBZoteroKey;
 
     private bridge?: IframeReaderBridge;
+    /** A navigation requested before the bridge existed (a link that opened
+     * this reader); applied once the reader is ready. */
+    private pendingNavigation?: ReaderNavigation;
     private colorScheme: ColorScheme = "light"; // Default to light
     private unsubscribeSyncFinished?: () => void;
     private unsubscribeAnnotationChanged?: () => void;
@@ -585,6 +588,11 @@ export class ZoteroReaderView extends ItemView {
             readerInitialized = true;
             if (superseded()) return;
 
+            if (this.pendingNavigation) {
+                this.readerNavigate(this.pendingNavigation);
+                this.pendingNavigation = undefined;
+            }
+
             // Subscribe to sync events for live annotation updates
             this.subscribeToSyncEvents();
             this.subscribeToAnnotationChanges();
@@ -619,7 +627,10 @@ export class ZoteroReaderView extends ItemView {
     }
 
     readerNavigate(navigationInfo: ReaderNavigation) {
-        if (!this.bridge) return;
+        if (!this.bridge) {
+            this.pendingNavigation = navigationInfo;
+            return;
+        }
 
         ff(
             this.bridge.navigate(navigationInfo),
@@ -661,6 +672,7 @@ export class ZoteroReaderView extends ItemView {
 
         this.fileContentMD5 = undefined;
         this.knownAnnotationIds.clear();
+        this.pendingNavigation = undefined;
     }
 
     private releaseDocumentLease(): void {
