@@ -115,6 +115,46 @@ describe("reusing a reader leaf", () => {
     });
 });
 
+describe("obsidian://zotflow links", () => {
+    // Call the handler the plugin registered, as Obsidian does for a clicked
+    // link (minus the OS round trip and the trust prompt).
+    const follow = (page, params) =>
+        page.evaluate(async (p) => {
+            await window.app.workspace.protocolHandler.handlers.get("zotflow")({ action: "zotflow", ...p });
+        }, params);
+    const activePage = (page) =>
+        page.frameLocator(".workspace-leaf.mod-active iframe").locator("#pageNumber").inputValue();
+
+    test("&page= opens the attachment at that page, in a new and in an open reader", async () => {
+        const { page } = session;
+        // Leave the reader on page 1, so a restored view state cannot pass for page 2.
+        const r = await openReader(page, key("attention-pdf"));
+        await r.reader.locator("#pageNumber").fill("1");
+        await r.reader.locator("#pageNumber").press("Enter");
+        await page.evaluate(() => {
+            for (const l of window.app.workspace.getLeavesOfType("zotflow-zotero-reader-view")) l.detach();
+        });
+
+        const link = { type: "open-attachment", libraryID: String(LIBRARY_ID), key: key("attention-pdf") };
+        await follow(page, { ...link, page: "2" });
+        await until(async () => (await activePage(page)) === "2", { message: "page 2 in a new reader" });
+
+        await follow(page, { ...link, page: "1" });
+        await until(async () => (await activePage(page)) === "1", { message: "page 1 in the open reader" });
+    });
+
+    test("an annotation link still selects the annotation", async () => {
+        const { page } = session;
+        const r = await openReader(page, key("attention-pdf"));
+        await r.showSidebar();
+        const id = key("attention-pdf-underline");
+        await follow(page, { type: "open-annotation", libraryID: String(LIBRARY_ID), key: id });
+        await until(async () => /\bselected\b/.test((await r.card(id).getAttribute("class")) ?? ""), {
+            message: "annotation selected",
+        });
+    });
+});
+
 describe("EPUB reader", () => {
     test("shows the fixture highlight", async () => {
         const r = await openReader(session.page, key("morphology-epub"));
