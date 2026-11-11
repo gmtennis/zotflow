@@ -973,3 +973,123 @@ describe("updateSettings", () => {
         ]);
     });
 });
+
+/* ================================================================ */
+/*  Local-only lookup (hover preview)                               */
+/* ================================================================ */
+
+describe("getLocalFileBlob", () => {
+    // A hover must never download or raise a notice: it serves what is on
+    // this device, or null.
+    const quiet = () => {
+        expect(h.fetches).toEqual([]);
+        expect(h.webdav.downloads).toEqual([]);
+        expect(h.host.notices).toEqual([]);
+    };
+
+    it("serves a valid cache entry", async () => {
+        await h.seedAttachment("ATTACH01", { md5: "abc123" });
+        await h.seedCached("ATTACH01", { buffer: bytes(4, 5, 6), md5: "abc123" });
+
+        const blob = await h.service.getLocalFileBlob(USER_ID, "ATTACH01");
+
+        expect(await readBlob(blob!)).toEqual([4, 5, 6]);
+        quiet();
+    });
+
+    it("returns null instead of downloading when nothing is cached", async () => {
+        await h.seedAttachment("ATTACH01");
+        h.setApiPayload(bytes(1, 2, 3));
+
+        expect(await h.service.getLocalFileBlob(USER_ID, "ATTACH01")).toBeNull();
+        quiet();
+    });
+
+    it("returns null for a stale cache entry", async () => {
+        await h.seedAttachment("ATTACH01", { md5: "newmd5" });
+        await h.seedCached("ATTACH01", { md5: "oldmd5" });
+
+        expect(await h.service.getLocalFileBlob(USER_ID, "ATTACH01")).toBeNull();
+        quiet();
+    });
+
+    it("ignores the cache when caching is off", async () => {
+        h = await createAttachmentHarness({ settings: { useCache: false } });
+        await h.seedAttachment("ATTACH01");
+        await h.seedCached("ATTACH01", { buffer: bytes(4, 5, 6) });
+
+        expect(await h.service.getLocalFileBlob(USER_ID, "ATTACH01")).toBeNull();
+        quiet();
+    });
+
+    it("reads a linked file from disk", async () => {
+        await h.seedAttachment("LINKED01", {
+            linkMode: "linked_file",
+            path: "/tmp/paper.pdf",
+        });
+        h.host.readExternalBinaryFile = async () => bytes(5, 5, 5);
+
+        const blob = await h.service.getLocalFileBlob(USER_ID, "LINKED01");
+
+        expect(await readBlob(blob!)).toEqual([5, 5, 5]);
+        quiet();
+    });
+
+    it("returns null quietly when a linked file cannot be read", async () => {
+        await h.seedAttachment("LINKED01", {
+            linkMode: "linked_file",
+            path: "/tmp/gone.pdf",
+        });
+        // readExternalBinaryFile throws by default.
+
+        expect(await h.service.getLocalFileBlob(USER_ID, "LINKED01")).toBeNull();
+        quiet();
+    });
+
+    it("reads Zotero local storage on desktop", async () => {
+        h = await createAttachmentHarness({
+            settings: {
+                useZoteroStorage: true,
+                zoteroStoragePath: "/zotero/storage",
+            },
+            isDesktop: true,
+        });
+        await h.seedAttachment("ATTACH01");
+        const read: string[] = [];
+        h.host.readExternalBinaryFile = async (path: string) => {
+            read.push(path);
+            return bytes(8, 8);
+        };
+
+        const blob = await h.service.getLocalFileBlob(USER_ID, "ATTACH01");
+
+        expect(await readBlob(blob!)).toEqual([8, 8]);
+        expect(read).toEqual(["/zotero/storage/ATTACH01/ATTACH01.pdf"]);
+        quiet();
+    });
+
+    it("falls back to the cache when Zotero storage has no copy", async () => {
+        h = await createAttachmentHarness({
+            settings: {
+                useZoteroStorage: true,
+                zoteroStoragePath: "/zotero/storage",
+            },
+            isDesktop: true,
+        });
+        await h.seedAttachment("ATTACH01");
+        await h.seedCached("ATTACH01", { buffer: bytes(4, 5, 6) });
+
+        const blob = await h.service.getLocalFileBlob(USER_ID, "ATTACH01");
+
+        expect(await readBlob(blob!)).toEqual([4, 5, 6]);
+        quiet();
+    });
+
+    it("returns null for an unknown key or a non-attachment", async () => {
+        await h.seedAttachment("ARTICLE1", { itemType: "journalArticle" });
+
+        expect(await h.service.getLocalFileBlob(USER_ID, "NOSUCH01")).toBeNull();
+        expect(await h.service.getLocalFileBlob(USER_ID, "ARTICLE1")).toBeNull();
+        quiet();
+    });
+});

@@ -351,6 +351,59 @@ export class AttachmentService {
     }
 
     /**
+     * The attachment's bytes if they are on this device — Zotero's local
+     * storage, a linked file, or a valid cache entry — else `null`. Never
+     * downloads and never notifies (used by the link hover preview).
+     */
+    async getLocalFileBlob(
+        libraryID: number,
+        key: string,
+    ): Promise<Blob | null> {
+        const item = await db.items.get([libraryID, key]);
+        if (!item || item.itemType !== "attachment") return null;
+        const data = item.raw.data;
+        const type = data.contentType || "application/pdf";
+
+        // Resolving the path can throw too (no base directory, an invalid
+        // filename): all of it means "not here".
+        const readExternal = async (path: () => Promise<string>) => {
+            try {
+                const buffer = await this.parentHost.readExternalBinaryFile(
+                    await path(),
+                );
+                return new Blob([buffer], { type });
+            } catch {
+                return null;
+            }
+        };
+
+        if (data.linkMode === "linked_file") {
+            const rawPath = data.path;
+            if (!rawPath) return null;
+            return readExternal(() => this.resolveLinkedFilePath(rawPath));
+        }
+
+        const storagePath = this.settings.zoteroStoragePath.trim();
+        if (
+            this.settings.useZoteroStorage &&
+            storagePath &&
+            (data.linkMode === "imported_file" ||
+                data.linkMode === "imported_url") &&
+            (await this.parentHost.isDesktopApp())
+        ) {
+            const blob = await readExternal(() =>
+                this.resolveLocalStorageFilePath(item, storagePath),
+            );
+            if (blob) return blob;
+        }
+
+        if (!this.settings.useCache) return null;
+        const cached = await db.files.get([libraryID, key]);
+        if (!cached || (data.md5 && cached.md5 !== data.md5)) return null;
+        return new Blob([cached.buffer], { type: cached.mimeType });
+    }
+
+    /**
      * Internal Download Task
      * Encapsulates logic for Download -> Verify -> Save -> Prune
      */
