@@ -3806,3 +3806,28 @@ body.zotflow-hide-region-markers .cm-zotflow-meta-line:not(.cm-active) {
         max-height: 140px;
     }
 }
+
+/* Hover preview of obsidian://zotflow links (ui/link-preview) */
+.zotflow-link-preview {
+    width: 450px;
+    max-width: 100%;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.zotflow-link-preview-page {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.zotflow-link-preview-text,
+.zotflow-link-preview-comment,
+.zotflow-link-preview-note {
+    margin: var(--size-4-2) var(--size-4-3);
+}
+
+.zotflow-link-preview-note {
+    color: var(--text-muted);
+    font-size: var(--font-ui-smaller);
+}

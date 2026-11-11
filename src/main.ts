@@ -4,6 +4,7 @@ import {
     MarkdownRenderer,
     MarkdownView,
     Menu,
+    Platform,
     Plugin,
     TFile,
     TAbstractFile,
@@ -56,6 +57,7 @@ import {
 import { NOTE_EDITOR_VIEW_TYPE, NoteEditorView } from "ui/note-editor/view";
 import { ZotFlowRegionDecorationExtension } from "ui/editor/zotflow-region-decoration-extension";
 import { CitationSuggest } from "ui/editor/citation-suggest";
+import { registerLinkPreview } from "ui/link-preview/link-preview";
 import { fireAndForgetIn } from "utils/fire-and-forget";
 import { focusReaderLeaf } from "utils/reader-leaf-navigation";
 
@@ -220,6 +222,9 @@ export default class ZotFlow extends Plugin {
         // Register citation suggest
         this.citationSuggest = new CitationSuggest();
         this.registerEditorSuggest(this.citationSuggest);
+
+        // Hover preview of obsidian://zotflow links (desktop: needs a pointer)
+        if (Platform.isDesktopApp) registerLinkPreview(this);
         finishStage("Register editor extensions and citation handlers");
 
         // Register protocol handler for zotflow URIs
