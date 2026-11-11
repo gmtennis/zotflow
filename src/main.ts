@@ -750,7 +750,7 @@ export default class ZotFlow extends Plugin {
         params: ObsidianProtocolData,
     ): Promise<void> {
         try {
-            const { type, libraryID, key, navigation } = params;
+            const { type, libraryID, key, navigation, page } = params;
 
             if (!type || !libraryID || !key) {
                 services.logService.log(
@@ -800,7 +800,18 @@ export default class ZotFlow extends Plugin {
                 // alwaysOpenChildNoteInEditor setting.
                 await openItemNote(libID, key, this.app);
             } else if (type === "open-attachment") {
-                await openAttachment(libID, key, this.app, navigation);
+                // `page` is a page label (as printed on the page) or, when
+                // no page has that label, a 1-based page number — the
+                // reader's `pageNumber` navigation. `navigation` wins.
+                await openAttachment(
+                    libID,
+                    key,
+                    this.app,
+                    navigation ??
+                        (page
+                            ? JSON.stringify({ pageNumber: page })
+                            : undefined),
+                );
             } else if (type === "open-annotation") {
                 await this.openAnnotation(libID, key);
             } else {
